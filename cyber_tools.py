@@ -42,6 +42,7 @@ import string
 import subprocess
 import sys
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -132,7 +133,11 @@ COMMON_PORTS: Dict[int, str] = {
 
 
 def visible_len(text: str) -> int:
-    return len(ANSI_RE.sub("", text))
+    """Terminal display width: strips ANSI codes and counts wide glyphs (e.g. ⚡) as 2 columns."""
+    return sum(
+        2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
+        for ch in ANSI_RE.sub("", text)
+    )
 
 
 def box_row(content: str) -> str:
@@ -441,10 +446,10 @@ def tool_port_scanner(target: str, port_spec: str = "common", timeout: float = 0
 # ============================================================================
 # 2. KILL PORT JOB (TERMINATE PROCESS OCCUPYING A PORT)
 # ============================================================================
-def tool_kill_port(port: int, force: bool = False):
+def tool_kill_port(port: int, force: bool = False, timeout: float = 5.0):
     print_header(
         "CYBER-KILL // PORT JOB & PROCESS TERMINATION ENGINE",
-        f"Target Port: TCP/UDP :{port}  │  Signal Mode: {'SIGKILL (FORCE)' if force else 'SIGTERM / GRACEFUL'}",
+        f"Target Port: TCP/UDP :{port}  │  Signal Mode: {'SIGKILL (FORCE)' if force else f'SIGTERM / GRACEFUL (timeout {timeout}s)'}",
     )
 
     pids = find_pids_by_port(port)
@@ -474,17 +479,26 @@ def tool_kill_port(port: int, force: bool = False):
                 if force:
                     cmd.append("/F")
                 subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                print(f"  {GREEN}{BOLD}✔ TERMINATED:{RESET} {WHITE}PID {pid} ({name}) freed from port {port}.{RESET}\n")
             else:
-                sig = signal.SIGKILL if force else signal.SIGTERM
-                os.kill(pid, sig)
-                time.sleep(0.15)
-                # Escalate to SIGKILL if still alive
-                try:
-                    os.kill(pid, 0)
+                if force:
                     os.kill(pid, signal.SIGKILL)
-                except OSError:
-                    pass
-            print(f"  {GREEN}{BOLD}✔ TERMINATED:{RESET} {WHITE}PID {pid} ({name}) freed from port {port}.{RESET}\n")
+                    print(f"  {GREEN}{BOLD}✔ TERMINATED:{RESET} {WHITE}PID {pid} ({name}) freed from port {port}.{RESET}\n")
+                else:
+                    os.kill(pid, signal.SIGTERM)
+                    deadline = time.time() + timeout
+                    terminated = False
+                    while time.time() < deadline:
+                        try:
+                            os.kill(pid, 0)  # probe if still alive
+                            time.sleep(0.1)
+                        except OSError:
+                            terminated = True
+                            break
+                    if terminated:
+                        print(f"  {GREEN}{BOLD}✔ TERMINATED:{RESET} {WHITE}PID {pid} ({name}) freed from port {port}.{RESET}\n")
+                    else:
+                        print(f"  {YELLOW}⚠ STILL RUNNING:{RESET} PID {pid} ({name}) did not exit within {timeout}s. Rerun with {CYAN}--force{RESET}.\n")
         except PermissionError:
             print(f"  {RED}✖ PERMISSION DENIED:{RESET} Cannot kill PID {pid} ({name}). Try with {CYAN}sudo{RESET}.\n")
         except Exception as e:
@@ -1331,54 +1345,26 @@ def interactive_menu():
             )
         )
         print(f"{MAGENTA}╠{'═' * BOX_INNER_WIDTH}╣{RESET}")
-        print(
-            box_row(
-                f"  {CYAN}[1]{RESET} {WHITE}Port & Process Scanner{RESET}   {GRAY}(cyber-ports){RESET}   "
-                f"│  {CYAN}[8]{RESET} {WHITE}Crypto Hash & JWT Decode{RESET} {GRAY}(cyber-hash){RESET}"
-            )
-        )
-        print(
-            box_row(
-                f"  {CYAN}[2]{RESET} {WHITE}Kill Port Job (Free Port){RESET}{GRAY}(cyber-kill){RESET}    "
-                f"│  {CYAN}[9]{RESET} {WHITE}Quantum Key Generator{RESET}    {GRAY}(cyber-keygen){RESET}"
-            )
-        )
-        print(
-            box_row(
-                f"  {CYAN}[3]{RESET} {WHITE}Jobs, Threads & Cron Scan{RESET}{GRAY}(cyber-jobs){RESET}    "
-                f"│  {CYAN}[10]{RESET} {WHITE}File Integrity (FIM){RESET}    {GRAY}(cyber-fim){RESET}"
-            )
-        )
-        print(
-            box_row(
-                f"  {CYAN}[4]{RESET} {WHITE}Domain / DNS / IP Recon{RESET}  {GRAY}(cyber-recon){RESET}   "
-                f"│  {CYAN}[11]{RESET} {WHITE}Kernel & Host Audit{RESET}     {GRAY}(cyber-audit){RESET}"
-            )
-        )
-        print(
-            box_row(
-                f"  {CYAN}[5]{RESET} {WHITE}SSL/TLS Cert Inspector{RESET}   {GRAY}(cyber-ssl){RESET}     "
-                f"│  {CYAN}[12]{RESET} {WHITE}Secret Leak Scanner{RESET}     {GRAY}(cyber-secrets){RESET}"
-            )
-        )
-        print(
-            box_row(
-                f"  {CYAN}[6]{RESET} {WHITE}HTTP Security Headers{RESET}    {GRAY}(cyber-headers){RESET} "
-                f"│  {CYAN}[13]{RESET} {WHITE}System Cyber Arsenal{RESET}    {GRAY}(cyber-arsenal){RESET}"
-            )
-        )
-        print(
-            box_row(
-                f"  {CYAN}[7]{RESET} {WHITE}Active TCP Connections{RESET}   {GRAY}(cyber-conn){RESET}    "
-                f"│  {CYAN}[14]{RESET} {GREEN}{BOLD}Face/Age/Mood/ASL Cam{RESET} {GRAY}(cyber-cam){RESET}"
-            )
-        )
-        print(
-            box_row(
-                f"  {CYAN}[15]{RESET} {YELLOW}{BOLD}Omni-Search Engine{RESET}      {GRAY}(cyber-search){RESET}  "
-                f"│  {RED}[0]{RESET}  {GRAY}Exit Cyber-Deck{RESET}"
-            )
-        )
+        menu_rows = [
+            (("1", "Port & Process Scanner", "cyber-ports", WHITE), ("8", "Hash & JWT Decode", "cyber-hash", WHITE)),
+            (("2", "Kill Port Job", "cyber-kill", WHITE), ("9", "Key Generator", "cyber-keygen", WHITE)),
+            (("3", "Jobs, Threads & Cron", "cyber-jobs", WHITE), ("10", "File Integrity", "cyber-fim", WHITE)),
+            (("4", "Domain / DNS / IP Recon", "cyber-recon", WHITE), ("11", "Kernel & Host Audit", "cyber-audit", WHITE)),
+            (("5", "SSL/TLS Inspector", "cyber-ssl", WHITE), ("12", "Secret Leak Scanner", "cyber-secrets", WHITE)),
+            (("6", "HTTP Security Headers", "cyber-headers", WHITE), ("13", "Cyber Arsenal", "cyber-arsenal", WHITE)),
+            (("7", "Active TCP Connections", "cyber-conn", WHITE), ("14", "Face/Age/Mood/ASL", "cyber-cam", GREEN + BOLD)),
+            (("15", "Omni-Search Engine", "cyber-search", YELLOW + BOLD), ("0", "Exit Cyber-Deck", "", GRAY)),
+        ]
+
+        def menu_cell(num: str, label: str, alias: str, color: str, width: int) -> str:
+            key_color = RED if num == "0" else CYAN
+            cell = f" {key_color}[{num:>2}]{RESET} {color}{label}{RESET}"
+            if alias:
+                cell += f" {GRAY}({alias}){RESET}"
+            return cell + " " * max(0, width - visible_len(cell))
+
+        for left, right in menu_rows:
+            print(box_row(menu_cell(*left, width=43) + f"{GRAY}│{RESET}" + menu_cell(*right, width=42)))
         print(f"{MAGENTA}╚{'═' * BOX_INNER_WIDTH}╝{RESET}")
 
         try:
@@ -1397,7 +1383,9 @@ def interactive_menu():
         elif choice == "2":
             port_s = input(f"  {CYAN}▸ Enter Port Number to Kill (e.g. 3000, 8000): {RESET}").strip()
             if port_s.isdigit():
-                tool_kill_port(int(port_s), force=True)
+                force_s = input(f"  {CYAN}▸ Force kill? [y/N]: {RESET}").strip().lower()
+                force = force_s in ("y", "yes")
+                tool_kill_port(int(port_s), force=force)
             else:
                 print(f"  {RED}✖ Invalid port number.{RESET}")
         elif choice == "3":
@@ -1455,6 +1443,7 @@ def main():
     parser.add_argument("--range", default="common", help="Port range for --ports (e.g. 'common', '1-1024', '22,80,443')")
     parser.add_argument("--kill-port", type=int, metavar="PORT", help="Find and terminate process listening on PORT")
     parser.add_argument("--force", action="store_true", help="Force kill (SIGKILL / /F) when using --kill-port")
+    parser.add_argument("--timeout", type=float, default=5.0, metavar="SECS", help="Seconds to wait for graceful shutdown before reporting still running (default: 5)")
     parser.add_argument("--jobs", action="store_true", help="Scan live thread counts, active processes & scheduled cron/system jobs")
     parser.add_argument("--recon", metavar="DOMAIN_OR_IP", help="DNS, reverse PTR, and ASN/Geo reconnaissance")
     parser.add_argument("--ssl", metavar="HOST", help="SSL/TLS certificate & cipher suite inspector")
@@ -1474,7 +1463,7 @@ def main():
     if args.ports:
         tool_port_scanner(args.ports, args.range)
     elif args.kill_port is not None:
-        tool_kill_port(args.kill_port, force=args.force)
+        tool_kill_port(args.kill_port, force=args.force, timeout=args.timeout)
     elif args.jobs:
         tool_jobs_and_threads()
     elif args.recon:

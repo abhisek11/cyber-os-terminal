@@ -138,6 +138,8 @@ cyber-ports 127.0.0.1 1-1024
 cyber-ports -Target 127.0.0.1 -Range "22,80,443"   # quote lists in PowerShell
 ```
 
+![Terminal output for a localhost port scan](screenshots/commands/cyber-ports.png)
+
 How ranges are read (from PR #47): ends are inclusive, `1024-1` is treated as `1-1024`, `0-2` is trimmed to `1,2`, and bad input such as `web-80` prints a red `✖ Invalid port spec` message. Planned: IPv6, UDP and `--top 1000` ([#23](https://github.com/abhisek11/cyber-os-terminal/issues/23)).
 
 ### `cyber-kill`
@@ -146,21 +148,23 @@ Finds whatever is holding a port and terminates it — the classic fix for *"Err
 
 | Shortcut | PowerShell | Direct |
 | :-- | :-- | :-- |
-| `cyber-kill PORT` | `cyber-kill PORT` | `python3 cyber_tools.py --kill-port PORT [--force]` |
+| `cyber-kill PORT` | `cyber-kill PORT` | `python3 cyber_tools.py --kill-port PORT [--force] [--timeout SECS]` |
 
 | Argument | Meaning |
 | :-- | :-- |
 | `PORT` | Port number (required) |
-| `--force` | Hard kill (`SIGKILL` / `taskkill /F`). The shortcut **always** adds this. |
+| `--force` | Hard kill (`SIGKILL` / `taskkill /F`) |
+| `--timeout SECS` | Seconds to wait for graceful `SIGTERM` shutdown (default 5). Only used without `--force`. |
 
 ```bash
-cyber-kill 3000                                # free port 3000 (force)
-python3 cyber_tools.py --kill-port 8000        # try SIGTERM first
+cyber-kill 3000                                # free port 3000 (graceful by default; asks for force in menu)
+python3 cyber_tools.py --kill-port 8000        # SIGTERM, wait up to 5s
 python3 cyber_tools.py --kill-port 8000 --force
+python3 cyber_tools.py --kill-port 8000 --timeout 10
 sudo python3 cyber_tools.py --kill-port 80     # ports owned by root need sudo
 ```
 
-It prints the PID table before killing. Be careful with system ports such as `22` (SSH) — killing `sshd` drops remote sessions. Open work: confirmation prompt ([#5](https://github.com/abhisek11/cyber-os-terminal/issues/5)), a truly graceful mode ([#4](https://github.com/abhisek11/cyber-os-terminal/issues/4), [#51](https://github.com/abhisek11/cyber-os-terminal/issues/51)), safer matching ([#2](https://github.com/abhisek11/cyber-os-terminal/issues/2), [#3](https://github.com/abhisek11/cyber-os-terminal/issues/3)).
+It prints the PID table before killing. Without `--force` it sends `SIGTERM` and polls for up to `--timeout` seconds (default 5). If the process is still running it reports that and suggests rerunning with `--force` instead of escalating silently. Be careful with system ports such as `22` (SSH) — killing `sshd` drops remote sessions. Open work: confirmation prompt ([#5](https://github.com/abhisek11/cyber-os-terminal/issues/5)), safer matching ([#2](https://github.com/abhisek11/cyber-os-terminal/issues/2), [#3](https://github.com/abhisek11/cyber-os-terminal/issues/3)).
 
 ### `cyber-jobs`
 
@@ -288,6 +292,8 @@ cyber-hash ./scifi_hud.py                      # hash a file
 cyber-hash ~/Downloads/ubuntu-24.04.iso        # compare with the publisher's SHA-256
 ```
 
+![Terminal output for hashing a text string](screenshots/commands/cyber-hash.png)
+
 ### `cyber-decode`
 
 Auto-detects and decodes a payload: **JWT** (pretty-prints header and payload, shows the signature), **Base64**, **hex** and **URL-encoding**, and also shows the input re-encoded as Base64 and hex.
@@ -302,6 +308,8 @@ cyber-decode 68656c6c6f                                     # hex → hello
 cyber-decode aGVsbG8gd29ybGQ=                               # base64 → hello world
 cyber-decode "name%3Dneo%26role%3Dadmin"                    # URL → name=neo&role=admin
 ```
+
+![Terminal output for decoding a hexadecimal payload](screenshots/commands/cyber-decode.png)
 
 Always quote JWTs and anything with `&`, `=` or `%`. JWT signatures are **not verified** — this is for reading tokens, not trusting them. Spurious Base64 output on plain words: [#10](https://github.com/abhisek11/cyber-os-terminal/issues/10).
 

@@ -960,6 +960,8 @@ def tool_decode(payload: str):
                 print(f"\n  {CYAN}{BOLD}▸ JWT {label}:{RESET}")
                 for line in pretty.splitlines():
                     print(f"    {GREEN}{line}{RESET}")
+                if label == "HEADER" and parsed.get("alg") == "none":
+                    print(f"    {RED}{BOLD}⚠ WARNING: JWT uses alg=none (insecure, no signature verification){RESET}")
                 if label == "PAYLOAD" and "exp" in parsed:
                     exp_dt = datetime.datetime.fromtimestamp(int(parsed["exp"]), datetime.timezone.utc)
                     now_dt = datetime.datetime.now(datetime.timezone.utc)
@@ -970,13 +972,20 @@ def tool_decode(payload: str):
         print(f"\n  {PURPLE}▸ SIGNATURE (Base64URL):{RESET} {GRAY}{parts[2]}{RESET}\n")
         return
 
-    try:
-        padded = payload.strip() + "=" * ((4 - len(payload.strip()) % 4) % 4)
-        b64_out = base64.b64decode(padded, validate=False).decode("utf-8", errors="ignore")
-        if b64_out and any(c in string.printable for c in b64_out):
-            print(f"  {CYAN}{BOLD}▸ BASE64 DECODED :{RESET} {GREEN}{b64_out}{RESET}")
-    except Exception:
-        pass
+    # Strict Base64 detection (standard and URL-safe)
+    b64_pattern = re.compile(r"^[A-Za-z0-9+/=_-]+$")
+    stripped = payload.strip()
+    if b64_pattern.match(stripped):
+        for alphabet_fn, name in ((base64.b64decode, "standard"), (base64.urlsafe_b64decode, "url-safe")):
+            try:
+                padded = stripped + "=" * ((4 - len(stripped) % 4) % 4)
+                raw = alphabet_fn(padded, validate=True)
+                decoded = raw.decode("utf-8", errors="ignore")
+                if decoded and sum(c in string.printable for c in decoded) / len(decoded) > 0.9:
+                    print(f"  {CYAN}{BOLD}▸ BASE64 DECODED ({name}):{RESET} {GREEN}{decoded}{RESET}")
+                    break
+            except Exception:
+                continue
 
     clean_hex = re.sub(r"^0x|\s+", "", payload.strip())
     if len(clean_hex) % 2 == 0 and all(c in string.hexdigits for c in clean_hex):

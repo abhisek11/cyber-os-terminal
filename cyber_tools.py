@@ -448,10 +448,10 @@ def tool_port_scanner(target: str, port_spec: str = "common", timeout: float = 0
 # ============================================================================
 # 2. KILL PORT JOB (TERMINATE PROCESS OCCUPYING A PORT)
 # ============================================================================
-def tool_kill_port(port: int, force: bool = False):
+def tool_kill_port(port: int, force: bool = False, timeout: float = 5.0):
     print_header(
         "CYBER-KILL // PORT JOB & PROCESS TERMINATION ENGINE",
-        f"Target Port: TCP/UDP :{port}  │  Signal Mode: {'SIGKILL (FORCE)' if force else 'SIGTERM / GRACEFUL'}",
+        f"Target Port: TCP/UDP :{port}  │  Signal Mode: {'SIGKILL (FORCE)' if force else f'SIGTERM / GRACEFUL (timeout {timeout}s)'}",
     )
 
     pids = find_pids_by_port(port)
@@ -481,17 +481,26 @@ def tool_kill_port(port: int, force: bool = False):
                 if force:
                     cmd.append("/F")
                 subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                print(f"  {GREEN}{BOLD}✔ TERMINATED:{RESET} {WHITE}PID {pid} ({name}) freed from port {port}.{RESET}\n")
             else:
-                sig = signal.SIGKILL if force else signal.SIGTERM
-                os.kill(pid, sig)
-                time.sleep(0.15)
-                # Escalate to SIGKILL if still alive
-                try:
-                    os.kill(pid, 0)
+                if force:
                     os.kill(pid, signal.SIGKILL)
-                except OSError:
-                    pass
-            print(f"  {GREEN}{BOLD}✔ TERMINATED:{RESET} {WHITE}PID {pid} ({name}) freed from port {port}.{RESET}\n")
+                    print(f"  {GREEN}{BOLD}✔ TERMINATED:{RESET} {WHITE}PID {pid} ({name}) freed from port {port}.{RESET}\n")
+                else:
+                    os.kill(pid, signal.SIGTERM)
+                    deadline = time.time() + timeout
+                    terminated = False
+                    while time.time() < deadline:
+                        try:
+                            os.kill(pid, 0)  # probe if still alive
+                            time.sleep(0.1)
+                        except OSError:
+                            terminated = True
+                            break
+                    if terminated:
+                        print(f"  {GREEN}{BOLD}✔ TERMINATED:{RESET} {WHITE}PID {pid} ({name}) freed from port {port}.{RESET}\n")
+                    else:
+                        print(f"  {YELLOW}⚠ STILL RUNNING:{RESET} PID {pid} ({name}) did not exit within {timeout}s. Rerun with {CYAN}--force{RESET}.\n")
         except PermissionError:
             print(f"  {RED}✖ PERMISSION DENIED:{RESET} Cannot kill PID {pid} ({name}). Try with {CYAN}sudo{RESET}.\n")
         except Exception as e:
@@ -1378,7 +1387,9 @@ def interactive_menu():
         elif choice == "2":
             port_s = input(f"  {CYAN}▸ Enter Port Number to Kill (e.g. 3000, 8000): {RESET}").strip()
             if port_s.isdigit():
-                tool_kill_port(int(port_s), force=True)
+                force_s = input(f"  {CYAN}▸ Force kill? [y/N]: {RESET}").strip().lower()
+                force = force_s in ("y", "yes")
+                tool_kill_port(int(port_s), force=force)
             else:
                 print(f"  {RED}✖ Invalid port number.{RESET}")
         elif choice == "3":
@@ -1437,6 +1448,7 @@ def main():
     parser.add_argument("--range", default="common", help="Port range for --ports (e.g. 'common', '1-1024', '22,80,443')")
     parser.add_argument("--kill-port", type=int, metavar="PORT", help="Find and terminate process listening on PORT")
     parser.add_argument("--force", action="store_true", help="Force kill (SIGKILL / /F) when using --kill-port")
+    parser.add_argument("--timeout", type=float, default=5.0, metavar="SECS", help="Seconds to wait for graceful shutdown before reporting still running (default: 5)")
     parser.add_argument("--jobs", action="store_true", help="Scan live thread counts, active processes & scheduled cron/system jobs")
     parser.add_argument("--recon", metavar="DOMAIN_OR_IP", help="DNS, reverse PTR, and ASN/Geo reconnaissance")
     parser.add_argument("--ssl", metavar="HOST", help="SSL/TLS certificate & cipher suite inspector")
@@ -1456,7 +1468,7 @@ def main():
     if args.ports:
         tool_port_scanner(args.ports, args.range)
     elif args.kill_port is not None:
-        tool_kill_port(args.kill_port, force=args.force)
+        tool_kill_port(args.kill_port, force=args.force, timeout=args.timeout)
     elif args.jobs:
         tool_jobs_and_threads()
     elif args.recon:

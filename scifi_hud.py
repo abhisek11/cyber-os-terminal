@@ -554,7 +554,7 @@ def render_hud(animate_boot: bool = False):
     )
     print(
         box_row(
-            f" {BLUE}❖ NVME VOL :{RESET} {make_bar(disk_pct, 18)} "
+            f" {BLUE}❖ DISK VOL :{RESET} {make_bar(disk_pct, 18)} "
             f"{GRAY}│{RESET} {WHITE}{disk_used:.1f} GB / {disk_total:.1f} GB STORAGE{RESET}"
         )
     )
@@ -704,7 +704,7 @@ def network_scan():
                 print(f"{GRAY}○ CLOSED / SHIELDED{RESET}")
 
     print(
-        f"\n  {CYAN}✔ SWEEP COMPLETE:{RESET} {WHITE}{open_count} active local service(s) detected, "
+        f"\n  {CYAN}✔ SWEEP COMPLETE:{RESET} {WHITE}{open_count} active local service{'' if open_count == 1 else 's'} detected, "
         f"{len(common_ports) - open_count} shielded.{RESET}\n"
     )
 

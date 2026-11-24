@@ -187,6 +187,16 @@ def print_header(title: str, subtitle: str = ""):
     print(f"{MAGENTA}╚{'═' * BOX_INNER_WIDTH}╝{RESET}")
 
 
+def plural(count: int, singular: str, plural_form: Optional[str] = None) -> str:
+    """Return the count with its noun: `1 thread`, `2 threads`, `0 threads`.
+
+    The plural is the singular plus `s` unless `plural_form` is given (`PROCESS` -> `PROCESSES`).
+    """
+    if count == 1:
+        return f"{count} {singular}"
+    return f"{count} {plural_form if plural_form is not None else singular + 's'}"
+
+
 def shannon_entropy(data: str) -> float:
     if not data:
         return 0.0
@@ -467,7 +477,7 @@ def tool_port_scanner(target: str, port_spec: str = "common", timeout: float = 0
         )
 
     print(
-        f"\n  {GREEN}✔ SCAN COMPLETE:{RESET} {WHITE}{len(open_ports)} open port(s) found "
+        f"\n  {GREEN}✔ SCAN COMPLETE:{RESET} {WHITE}{plural(len(open_ports), 'open port')} found "
         f"out of {len(ports)} scanned in {CYAN}{elapsed:.2f}s{RESET}."
     )
     if is_local:
@@ -498,12 +508,12 @@ def tool_kill_port(port: int, force: bool = False):
             print(f"\n  {GREEN}✔ Port {port} is already free (no active process listening on :{port}).{RESET}\n")
         return
 
-    print(f"\n  {YELLOW}⚡ FOUND {len(pids)} PROCESS JOB(S) BOUND TO PORT {port}:{RESET}\n")
+    print(f"\n  {YELLOW}⚡ FOUND {plural(len(pids), 'PROCESS', 'PROCESSES')} BOUND TO PORT {port}:{RESET}\n")
     for pid in pids:
         name, threads, cmdline = get_process_details(pid)
         print(f"  {CYAN}▸ PID          :{RESET} {WHITE}{BOLD}{pid}{RESET}")
         print(f"  {CYAN}▸ PROCESS NAME :{RESET} {GREEN}{BOLD}{name}{RESET}")
-        print(f"  {CYAN}▸ LIVE THREADS :{RESET} {PURPLE}{threads} thread(s){RESET}")
+        print(f"  {CYAN}▸ LIVE THREADS :{RESET} {PURPLE}{plural(threads, 'thread')}{RESET}")
         print(f"  {CYAN}▸ COMMAND LINE :{RESET} {GRAY}{cmdline[:68]}{RESET}\n")
 
         try:
@@ -610,7 +620,7 @@ def tool_jobs_and_threads():
 
     print(f"\n  {PURPLE}{BOLD}[1] SYSTEM-WIDE LIVE THREAD & PROCESS TELEMETRY{RESET}")
     print(f"  {GRAY}▸ Total Active Processes :{RESET} {WHITE}{BOLD}{len(procs)}{RESET}")
-    print(f"  {GRAY}▸ Total Live Threads     :{RESET} {CYAN}{BOLD}{total_threads} live threads{RESET}")
+    print(f"  {GRAY}▸ Total Live Threads     :{RESET} {CYAN}{BOLD}{plural(total_threads, 'live thread')}{RESET}")
     avg_t = (total_threads / len(procs)) if procs else 0.0
     print(f"  {GRAY}▸ Avg Threads / Process  :{RESET} {GREEN}{avg_t:.1f} threads/proc{RESET}\n")
 
@@ -623,7 +633,7 @@ def tool_jobs_and_threads():
         print(
             f"  {CYAN}{pid:<10}{RESET} "
             f"{WHITE}{BOLD}{name[:24]:<26}{RESET} "
-            f"{t_color}{BOLD}{f'{threads} threads':<16}{RESET} "
+            f"{t_color}{BOLD}{plural(threads, 'thread'):<16}{RESET} "
             f"{GREEN}{f'{mem_mb:7.1f} MB':<15}{RESET} "
             f"{PURPLE}{state}{RESET}"
         )
@@ -690,7 +700,7 @@ def tool_jobs_and_threads():
         print(f"  {GRAY}▸ Systemd Active Timers  :{RESET} {GREEN}{BOLD}{systemd_timers_count}{RESET}")
     if OS_NAME == "Windows":
         print(f"  {GRAY}▸ Windows Scheduled Tasks:{RESET} {GREEN}{BOLD}{win_tasks_count}{RESET}")
-    print(f"  {GRAY}▸ TOTAL SCHEDULED / BG   :{RESET} {MAGENTA}{BOLD}{total_scheduled} active scheduled/daemon job(s){RESET}")
+    print(f"  {GRAY}▸ TOTAL SCHEDULED / BG   :{RESET} {MAGENTA}{BOLD}{plural(total_scheduled, 'active scheduled/daemon job')}{RESET}")
 
     if user_cron_jobs:
         print(f"\n  {CYAN}Active User Crontab Entries:{RESET}")

@@ -368,7 +368,7 @@ def render_browser_history(query: str = "recent", limit: int = 25):
         f"Query: '{query}'  │  Browsers: Chrome, Firefox, Brave, Edge, Chromium",
     )
     dbs = _discover_browser_dbs()
-    print(f"\n  {GRAY}▸ Detected Browser Databases :{RESET} {CYAN}{len(dbs)} profile(s){RESET}")
+    print(f"\n  {GRAY}▸ Detected Browser Databases :{RESET} {CYAN}{len(dbs)} profile{'' if len(dbs) == 1 else 's'}{RESET}")
     for bname, _, path in dbs[:4]:
         print(f"    {GRAY}• {bname:<14}:{RESET} {WHITE}{path}{RESET}")
 

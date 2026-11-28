@@ -162,7 +162,7 @@ python3 cyber_tools.py --kill-port 8000 --force
 sudo python3 cyber_tools.py --kill-port 80     # ports owned by root need sudo
 ```
 
-It prints the PID table before killing. Be careful with system ports such as `22` (SSH) — killing `sshd` drops remote sessions. Open work: confirmation prompt ([#5](https://github.com/abhisek11/cyber-os-terminal/issues/5)), a truly graceful mode ([#4](https://github.com/abhisek11/cyber-os-terminal/issues/4), [#51](https://github.com/abhisek11/cyber-os-terminal/issues/51)), safer matching ([#2](https://github.com/abhisek11/cyber-os-terminal/issues/2), [#3](https://github.com/abhisek11/cyber-os-terminal/issues/3)).
+It finds the owning process with `lsof`, then `ss` or `fuser` on Linux, or `netstat` on Windows. On a Linux box without those tools it reads the socket tables in `/proc`, so only a process that really holds the port is killed. It prints the PID table before killing. Be careful with system ports such as `22` (SSH) — killing `sshd` drops remote sessions. Open work: confirmation prompt ([#5](https://github.com/abhisek11/cyber-os-terminal/issues/5)), a truly graceful mode ([#4](https://github.com/abhisek11/cyber-os-terminal/issues/4), [#51](https://github.com/abhisek11/cyber-os-terminal/issues/51)), safer matching on Windows ([#3](https://github.com/abhisek11/cyber-os-terminal/issues/3)).
 
 ### `cyber-jobs`
 

@@ -47,7 +47,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from cyber_version import __version__
 
@@ -268,6 +268,64 @@ def get_process_details(pid: int) -> Tuple[str, int, str]:
     return name, threads, cmdline or name
 
 
+PROC_NET_TABLES = ("tcp", "tcp6", "udp", "udp6")
+
+
+def proc_socket_inodes(port: int, proc_root: str = "/proc") -> Set[str]:
+    """Return the inodes of sockets bound to local `port` in /proc/net/{tcp,tcp6,udp,udp6}."""
+    inodes = set()
+    for table in PROC_NET_TABLES:
+        try:
+            with open(os.path.join(proc_root, "net", table), "r", encoding="ascii", errors="replace") as f:
+                lines = f.read().splitlines()[1:]
+        except OSError:
+            continue
+        for ln in lines:
+            # sl local_address rem_address st tx_queue:rx_queue tr:tm->when retrnsmt uid timeout inode ...
+            fields = ln.split()
+            if len(fields) < 10:
+                continue
+            _, _, local_port = fields[1].rpartition(":")
+            try:
+                if int(local_port, 16) != port:
+                    continue
+            except ValueError:
+                continue
+            inode = fields[9]
+            if inode.isdigit() and inode != "0":
+                inodes.add(inode)
+    return inodes
+
+
+def find_pids_by_port_proc(port: int, proc_root: str = "/proc") -> List[int]:
+    """Find PIDs holding a socket on local `port` by matching /proc/net inodes to /proc/<pid>/fd links."""
+    inodes = proc_socket_inodes(port, proc_root)
+    if not inodes:
+        return []
+    targets = {f"socket:[{inode}]" for inode in inodes}
+    pids = set()
+    try:
+        entries = list(os.scandir(proc_root))
+    except OSError:
+        return []
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        fd_dir = os.path.join(proc_root, entry.name, "fd")
+        try:
+            fds = os.listdir(fd_dir)
+        except OSError:
+            continue  # process exited or belongs to another user
+        for fd in fds:
+            try:
+                if os.readlink(os.path.join(fd_dir, fd)) in targets:
+                    pids.add(int(entry.name))
+                    break
+            except OSError:
+                continue
+    return sorted(pids)
+
+
 def find_pids_by_port(port: int) -> List[int]:
     """Find PIDs listening on or using a local TCP/UDP port across Linux, macOS, and Windows."""
     pids = set()
@@ -333,27 +391,11 @@ def find_pids_by_port(port: int) -> List[int]:
         except Exception:
             pass
 
-    # 5. Fallback: scan /proc/<pid>/cmdline for explicit port arguments (e.g., --port 8000, :8000, 8000)
+    # 5. Fallback on Linux without lsof/ss/fuser: read the socket tables in /proc directly.
+    #    Only processes that hold a socket on the local port are returned, never a process
+    #    that merely has the number somewhere in its command line.
     if not pids and OS_NAME == "Linux":
-        port_pat = re.compile(rf"(?:--port[=\s]+|:[0]*|\b){port}\b")
-        try:
-            for entry in os.scandir("/proc"):
-                if not entry.name.isdigit():
-                    continue
-                pid = int(entry.name)
-                if pid == os.getpid():
-                    continue
-                try:
-                    with open(f"/proc/{entry.name}/cmdline", "rb") as f:
-                        cmd = f.read().replace(b"\x00", b" ").decode("utf-8", errors="ignore")
-                    if "cyber_tools.py" in cmd:
-                        continue
-                    if port_pat.search(cmd):
-                        pids.add(pid)
-                except Exception:
-                    continue
-        except Exception:
-            pass
+        pids.update(find_pids_by_port_proc(port))
 
     return sorted(pids)
 

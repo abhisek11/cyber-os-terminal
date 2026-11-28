@@ -22,8 +22,8 @@ class FakeProcTest(unittest.TestCase):
     """A hand-built /proc tree, so the parsing is checked on every OS."""
 
     def setUp(self):
-        if not hasattr(os, "symlink"):
-            self.skipTest("os.symlink is not available")
+        if os.name == "nt":
+            self.skipTest("the /proc fallback only runs on Linux; Windows symlinks need extra rights")
         self.tmp = tempfile.TemporaryDirectory()
         self.root = self.tmp.name
         os.makedirs(os.path.join(self.root, "net"))
